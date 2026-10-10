@@ -262,13 +262,15 @@ def test_endpoint_permite_exatamente_uma_chamada_e_bloqueia_a_segunda(
     instancia_mock.messages.create.assert_called_once()
 
 
-def test_cliente_anthropic_e_criado_sem_retries_automaticos(
+def test_cliente_anthropic_e_criado_sem_retries_e_com_timeout_explicito(
     monkeypatch, isolar_autorizacao_chamada_real, sdk_nunca_deve_ser_tocado
 ):
     """O SDK tem retry automático embutido por padrão (max_retries=2) para
-    erros retryable. Isso teria que estar desligado explicitamente, senão
-    uma autorização de UMA chamada poderia resultar em várias requisições
-    HTTP reais por trás de um único `messages.create()`."""
+    erros retryable, e um timeout implícito de 10 minutos se nada for
+    passado. Ambos precisam estar explicitamente configurados — senão uma
+    autorização de UMA chamada poderia resultar em várias requisições HTTP
+    reais por trás de um único `messages.create()`, ou ficar presa por
+    tempo demais."""
     monkeypatch.setattr(app_module, "ENABLE_PAID_API_CALLS", True)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "chave-falsa-so-para-o-teste")
     _conceder_uma_autorizacao(isolar_autorizacao_chamada_real)
@@ -280,7 +282,7 @@ def test_cliente_anthropic_e_criado_sem_retries_automaticos(
 
     client.post("/explicar", files={"imagem": ("exemplo.png", _png_valido_bytes(), "image/png")})
 
-    sdk_nunca_deve_ser_tocado.assert_called_once_with(max_retries=0)
+    sdk_nunca_deve_ser_tocado.assert_called_once_with(max_retries=0, timeout=60.0)
 
 
 # --- Fluxo completo, com o SDK mockado (prova que a integração funciona, ---

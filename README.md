@@ -42,6 +42,7 @@ Além da trava `ENABLE_PAID_API_CALLS` e do limitador geral acima, existe um **t
 - Consumida **atomicamente** (lock de arquivo via `fcntl.flock`) imediatamente antes de qualquer tentativa de chamada ao SDK — duas requisições concorrentes não conseguem gastar a mesma autorização.
 - A autorização é gasta **antes** da chamada acontecer. Se a chamada falhar (erro de rede, erro da API, o processo cair no meio do caminho) ou o servidor for reiniciado, **a autorização não volta sozinha** — é preciso reautorizar manualmente editando o arquivo de novo.
 - O cliente do SDK é criado com `max_retries=0`, para que uma falha não dispare retries automáticos internos do SDK (que, por padrão, tentaria novamente em erros como 429/5xx — gerando requisições HTTP reais adicionais por trás de uma única autorização).
+- O cliente do SDK também é criado com `timeout=60.0` (segundos), explícito — o padrão do SDK, se omitido, é 10 minutos. 60s dá folga generosa sobre o tempo de resposta observado em testes anteriores (~3s) sem deixar a requisição presa indefinidamente.
 
 **Para autorizar exatamente UMA chamada real:**
 
@@ -100,7 +101,7 @@ Cobertura (`test_app.py`, nível do endpoint HTTP):
 - Testa o limitador geral isoladamente (sem HTTP, sem rede) e via o endpoint (confirma `429` antes do SDK).
 - Confirma que, com zero autorizações de chamada real (o padrão), o endpoint bloqueia com `403` mesmo com tudo mais liberado.
 - Confirma que, com exatamente 1 autorização concedida, a primeira chamada passa (mockada) e a segunda — imediatamente em seguida — é bloqueada; o mock do SDK só é "chamado" uma única vez no total.
-- Confirma que o cliente do SDK é instanciado com `max_retries=0`.
+- Confirma que o cliente do SDK é instanciado com `max_retries=0` e `timeout=60.0`.
 - Um teste de fluxo completo com o SDK inteiramente substituído por `unittest.mock.MagicMock` (resposta simulada), provando que a integração (parsing, custo, contagem) funciona sem nenhum byte trafegar pela rede.
 
 Cobertura (`test_autorizacao.py`, nível do módulo de autorização):

@@ -113,7 +113,11 @@ async def explicar(imagem: UploadFile = File(...)):
         # em erros retryable (429, 5xx, falha de conexão). Isso desligado é
         # essencial aqui — uma autorização de UMA chamada não pode resultar
         # em várias requisições HTTP reais por causa de um retry interno.
-        client = anthropic.Anthropic(max_retries=0)
+        # timeout=60.0: valor explícito e deliberado (o padrão do SDK, se
+        # omitido, é 10 minutos) — 60s dá folga generosa sobre o tempo real
+        # observado em testes anteriores (~3s) sem deixar a requisição presa
+        # indefinidamente em caso de problema de rede.
+        client = anthropic.Anthropic(max_retries=0, timeout=60.0)
         resposta = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS_RESPOSTA,
