@@ -10,6 +10,10 @@ Garantias de isolamento:
 - O arquivo `contador_chamadas.json` do limitador é redirecionado para um
   arquivo temporário por teste (`monkeypatch` + `tmp_path`), para nunca ler
   ou sobrescrever o contador real do projeto.
+- `limitador.LIMITE_CHAMADAS` é fixado em 5 via `monkeypatch` em todo teste
+  (ver `isolar_limite_de_chamadas`) — sem isso, os testes dependeriam do
+  valor de `LIMITE_CHAMADAS` no `.env` real, que pode mudar (ex: durante
+  uma sessão de debug manual) e quebrar suposições hardcoded nos testes.
 - Nenhum teste aqui assume ou requer ANTHROPIC_API_KEY real — quando
   necessário, usamos um valor falso só para passar a checagem de "chave
   configurada" (a chave falsa nunca é usada para uma chamada de verdade,
@@ -53,6 +57,14 @@ def sdk_nunca_deve_ser_tocado():
     """
     with patch("anthropic.Anthropic") as mock_classe_anthropic:
         yield mock_classe_anthropic
+
+
+@pytest.fixture(autouse=True)
+def isolar_limite_de_chamadas(monkeypatch):
+    """Fixa limitador.LIMITE_CHAMADAS em 5 para todos os testes, independente
+    do valor real em .env — sem isso, os testes quebram se alguém mudar
+    LIMITE_CHAMADAS no .env real (como aconteceu nesta sessão)."""
+    monkeypatch.setattr(limitador, "LIMITE_CHAMADAS", 5)
 
 
 @pytest.fixture(autouse=True)

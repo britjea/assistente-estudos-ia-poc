@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "id": "geometria-7-ano",
+  "metadados": {
+    "titulo": "Geometria 7º Ano",
+    "disciplina": "Matemática",
+    "ano_serie": "7º ano",
+    "descricao": "Ângulos opostos pelo vértice, retas paralelas cortadas por transversal, e polígonos."
+  },
+  "capitulos": [
+    {
+      "id": "cap-angulos",
+      "titulo": "Capítulo 15 — Ângulos",
+      "ordem": 1,
+      "secoes": [
+        {
+          "id": "sec-opv",
+          "titulo": "Ângulos Opostos pelo Vértice (OPV)",
+          "blocos": [
+            {
+              "tipo": "destaque",
+              "tom": "azul",
+              "titulo": "O que são ângulos OPV?",
+              "texto": "Quando duas retas se cruzam, formam 4 ângulos. Os que ficam do lado oposto do ponto de cruzamento (vértice) são OPV — e são sempre iguais."
+            },
+            {
+              "tipo": "destaque",
+              "tom": "amarelo",
+              "titulo": "Propriedades dos OPV",
+              "itens": [
+                "Ângulos OPV são sempre congruentes (iguais em medida)",
+                "Dois ângulos adjacentes (lado a lado) são suplementares: somam 180°",
+                "Os 4 ângulos juntos somam sempre 360°"
+              ]
+            },
+            {
+              "tipo": "formula",
+              "expressao": "α (OPV) = α",
+              "legenda": "Ângulos opostos pelo vértice são sempre iguais"
+            },
+            {
+              "tipo": "destaque",
+              "tom": "verde",
+              "titulo": "Exemplo com equação",
+              "texto": "Dois ângulos OPV: um mede (3x + 10)° e o outro mede (5x − 30)°. Como são OPV: 3x + 10 = 5x − 30 → x = 20 → ângulo = 70°."
+            }
+          ]
+        },
+        {
+          "id": "sec-paralelas",
+          "titulo": "Retas Paralelas Cortadas por Transversal",
+          "blocos": [
+            {
+              "tipo": "paragrafo",
+              "texto": "Uma reta transversal cruza duas retas paralelas, formando **8 ângulos** (4 em cada interseção)."
+            },
+            {
+              "tipo": "tabela",
+              "titulo": "Os 5 tipos de pares de ângulos",
+              "colunas": ["Tipo", "Posição", "Relação"],
+              "linhas": [
+                ["Alternos internos", "Entre as paralelas, lados opostos da transversal", "Iguais"],
+                ["Alternos externos", "Fora das paralelas, lados opostos da transversal", "Iguais"],
+                ["Correspondentes", "Mesmo lado da transversal, um interno e um externo", "Iguais"],
+                ["Colaterais internos", "Entre as paralelas, mesmo lado da transversal", "Somam 180°"],
+                ["Colaterais externos", "Fora das paralelas, mesmo lado da transversal", "Somam 180°"]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cap-poligonos",
+      "titulo": "Capítulo 19 — Polígonos",
+      "ordem": 2,
+      "secoes": [
+        {
+          "id": "sec-diagonais",
+          "titulo": "Número de Diagonais",
+          "blocos": [
+            {
+              "tipo": "formula",
+              "expressao": "d = n(n − 3) / 2",
+              "legenda": "n = número de lados do polígono"
+            },
+            {
+              "tipo": "destaque",
+              "tom": "roxo",
+              "titulo": "Por que n(n − 3)?",
+              "itens": [
+                "Cada vértice pode se conectar a (n − 1) outros vértices",
+                "Tiramos 3: o próprio vértice (−1) + os 2 vizinhos (que formam lados, não diagonais)",
+                "Cada diagonal é contada 2 vezes (pelos dois extremos), por isso dividimos por 2"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "sec-angulos-internos",
+          "titulo": "Ângulos Internos e Externos",
+          "blocos": [
+            {
+              "tipo": "formula",
+              "expressao": "Soma dos ângulos internos = (n − 2) × 180°",
+              "legenda": "n = número de lados"
+            },
+            {
+              "tipo": "formula",
+              "expressao": "Soma dos ângulos externos = 360°",
+              "legenda": "Sempre, para qualquer polígono convexo"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "exercicios": [
+    {
+      "id": "ex-1",
+      "numero": 1,
+      "enunciado": "Duas retas se cruzam. Um dos ângulos formados mede 65°. Qual é a medida do ângulo oposto pelo vértice?",
+      "dica": "Ângulos OPV são sempre congruentes (iguais). O OPV de 65° é 65°.",
+      "resposta": {
+        "tipo_resposta": "num",
+        "valor_esperado": 65,
+        "tolerancia": 0
+      },
+      "explicacao": "OPV são iguais — o OPV de 65° é 65°."
+    },
+    {
+      "id": "ex-2",
+      "numero": 2,
+      "enunciado": "Duas retas se cruzam. Um dos ângulos mede 72°. Qual é o ângulo adjacente (suplementar)?",
+      "dica": "Ângulos adjacentes (lado a lado) somam 180°. 180° − 72° = ?",
+      "resposta": {
+        "tipo_resposta": "num",
+        "valor_esperado": 108,
+        "tolerancia": 0
+      },
+      "explicacao": "180° − 72° = 108° (suplementares)."
+    },
+    {
+      "id": "ex-3",
+      "numero": 3,
+      "enunciado": "Dois ângulos OPV medem (4x − 10)° e (2x + 30)°. Encontre o valor de x e depois o valor dos ângulos.",
+      "dica": "OPV iguais: 4x − 10 = 2x + 30 → 2x = 40 → x = 20. Ângulo = 4(20) − 10 = 70°",
+      "resposta": {
+        "tipo_resposta": "coord",
+        "campos": [
+          {"campo_id": "x", "rotulo": "x =", "valor_esperado": 20, "tolerancia": 0},
+          {"campo_id": "angulo", "rotulo": "Ângulo =", "valor_esperado": 70, "tolerancia": 0}
+        ]
+      },
+      "explicacao": "4x−10=2x+30 → 2x=40 → x=20 → 4(20)−10=70°"
+    },
+    {
+      "id": "ex-4",
+      "numero": 4,
+      "enunciado": "Quantas diagonais tem um octógono (8 lados)?",
+      "dica": "d = n(n−3)/2 = 8(8−3)/2 = 8×5/2 = 40/2 = ?",
+      "resposta": {
+        "tipo_resposta": "num",
+        "valor_esperado": 20,
+        "tolerancia": 0
+      },
+      "explicacao": "d = 8(8−3)/2 = 8×5/2 = 20 diagonais."
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q-1",
+      "categoria": "opv",
+      "pergunta": "Dois ângulos são opostos pelo vértice. Se um mede 55°, o outro mede:",
+      "opcoes": ["35°", "125°", "55°", "90°"],
+      "indice_correto": 2,
+      "explicacao": "OPV são sempre congruentes (iguais). OPV de 55° = 55°."
+    },
+    {
+      "id": "q-2",
+      "categoria": "opv",
+      "pergunta": "Duas retas se cruzam formando 4 ângulos. A soma de todos eles é:",
+      "opcoes": ["180°", "270°", "360°", "90°"],
+      "indice_correto": 2,
+      "explicacao": "Quatro ângulos formados por duas retas sempre somam 360°."
+    },
+    {
+      "id": "q-3",
+      "categoria": "paralelas",
+      "pergunta": "Ângulos correspondentes em retas paralelas são:",
+      "opcoes": ["Suplementares (somam 180°)", "Complementares (somam 90°)", "Congruentes (iguais)", "Sempre agudos"],
+      "indice_correto": 2,
+      "explicacao": "Correspondentes ficam no mesmo \"canto\" em cada interseção — sempre iguais."
+    },
+    {
+      "id": "q-4",
+      "categoria": "paralelas",
+      "pergunta": "Dois ângulos colaterais internos somam:",
+      "opcoes": ["90°", "180°", "270°", "360°"],
+      "indice_correto": 1,
+      "explicacao": "Colaterais (mesmo lado) são suplementares — somam 180°."
+    },
+    {
+      "id": "q-5",
+      "categoria": "poligonos",
+      "pergunta": "Quantas diagonais tem um pentágono (5 lados)?",
+      "opcoes": ["4", "5", "6", "8"],
+      "indice_correto": 1,
+      "explicacao": "d = 5(5−3)/2 = 5×2/2 = 5 diagonais."
+    }
+  ],
+  "simulado": [],
+  "dicas": [],
+  "videos": []
+}

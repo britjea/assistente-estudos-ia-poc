@@ -26,6 +26,7 @@ import autorizacao
 import custos
 import limitador
 import validacao
+from routers.materiais import router as materiais_router
 from config import (
     BASE_DIR,
     ENABLE_PAID_API_CALLS,
@@ -179,5 +180,7 @@ async def explicar(imagem: UploadFile = File(...)):
         }
     )
 
+
+app.include_router(materiais_router)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
