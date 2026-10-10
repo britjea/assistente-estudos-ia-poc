@@ -1,0 +1,4 @@
+# Dependências só para rodar os testes automatizados (test_app.py).
+# Não são necessárias para executar a aplicação em si.
+pytest
+httpx

@@ -1,5 +1,7 @@
 .env
 custos.csv
+custos_debug_sessao_anterior.csv
+contador_chamadas.json
 __pycache__/
 *.pyc
 venv/

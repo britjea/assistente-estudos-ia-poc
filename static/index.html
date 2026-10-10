@@ -35,10 +35,10 @@
 </head>
 <body>
   <h1>📚 Assistente de Estudos (experimento local)</h1>
-  <p>Selecione uma foto de um exercício escolar para receber uma explicação.</p>
+  <p>Selecione uma foto (JPEG ou PNG, até 5 MB) de um exercício escolar para receber uma explicação.</p>
 
   <form id="form-upload">
-    <input type="file" id="input-imagem" accept="image/jpeg,image/png,image/webp,image/gif" required />
+    <input type="file" id="input-imagem" accept="image/jpeg,image/png" required />
     <button type="submit">Explicar exercício</button>
   </form>
 
@@ -78,7 +78,9 @@
         respostaEl.textContent = json.explicacao;
         metaEl.textContent =
           `Modelo: ${json.modelo} · tokens entrada: ${json.input_tokens} · ` +
-          `tokens saída: ${json.output_tokens} · custo estimado: US$ ${json.custo_usd_estimado}`;
+          `tokens saída: ${json.output_tokens} · tempo: ${json.tempo_resposta_s}s · ` +
+          `custo estimado: US$ ${json.custo_usd_estimado} · ` +
+          `chamadas restantes neste limite local: ${json.chamadas_restantes}`;
       } catch (erro) {
         respostaEl.classList.add("erro");
         respostaEl.textContent = "Erro de conexão com o servidor.";

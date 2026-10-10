@@ -1,105 +1,106 @@
-import base64
-import csv
-import os
-from datetime import datetime, timezone
-from pathlib import Path
+"""Ponto de entrada da aplicação FastAPI. As rotas ficam finas — validação,
+limite de chamadas e registro de custo/tempo vivem em módulos separados
+(validacao.py, limitador.py, custos.py), e o prompt pedagógico fica em
+prompts/pedagogico.txt, fora do código de integração com a API.
+"""
 
-import anthropic
+import base64
+import logging
+import os
+import time
+
+# load_dotenv() precisa rodar ANTES de importar config (ou qualquer módulo
+# que leia variáveis de ambiente no carregamento) — caso contrário, valores
+# definidos em .env são ignorados silenciosamente na primeira importação.
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-haiku-4-5")
+import anthropic
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
-# Preço por milhão de tokens (USD), input/output. Verificar valores atuais
-# antes de confiar neles para projeções de custo reais.
-PRECOS_POR_MILHAO = {
-    "claude-haiku-4-5": (1.00, 5.00),
-    "claude-sonnet-5": (2.00, 10.00),  # preço promocional vigente até 2026-08-31
-}
+import custos
+import limitador
+import validacao
+from config import (
+    BASE_DIR,
+    ENABLE_PAID_API_CALLS,
+    MAX_TOKENS_RESPOSTA,
+    MODEL,
+    PROMPT_PEDAGOGICO_PATH,
+)
 
-TIPOS_PERMITIDOS = {"image/jpeg", "image/png", "image/webp", "image/gif"}
-TAMANHO_MAXIMO_BYTES = 10 * 1024 * 1024  # 10 MB
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("poc-estudos-ia")
 
-CUSTOS_CSV = Path(__file__).parent / "custos.csv"
-
-SYSTEM_PROMPT = """\
-Você é um professor particular paciente, ajudando um estudante do Ensino \
-Fundamental a entender um exercício escolar a partir de uma foto.
-
-Siga sempre estas regras:
-1. Identifique qual é o exercício mostrado na imagem.
-2. Explique, em linguagem simples, o que a questão está pedindo.
-3. Guie o raciocínio em etapas curtas e fáceis de entender, usando exemplos \
-quando ajudar.
-4. NUNCA entregue apenas a resposta final sem explicar o caminho até ela.
-5. Termine sempre com uma pergunta simples ou um pequeno desafio para o \
-estudante verificar se entendeu.
-6. Se a imagem estiver ilegível, cortada, embaçada ou girada a ponto de \
-você não conseguir identificar o exercício com confiança, diga isso \
-claramente e peça uma foto melhor — não tente adivinhar o conteúdo.
-7. Se tiver incerteza sobre algum passo do raciocínio, diga isso \
-explicitamente em vez de inventar uma explicação.
-
-Use um tom acolhedor e encorajador, adequado para uma criança ou \
-pré-adolescente.
-"""
+SYSTEM_PROMPT = PROMPT_PEDAGOGICO_PATH.read_text(encoding="utf-8")
 
 app = FastAPI()
 
 
-def registrar_custo(modelo: str, input_tokens: int, output_tokens: int) -> float:
-    preco_input, preco_output = PRECOS_POR_MILHAO.get(modelo, (0.0, 0.0))
-    custo_usd = (input_tokens * preco_input + output_tokens * preco_output) / 1_000_000
-
-    arquivo_novo = not CUSTOS_CSV.exists()
-    with open(CUSTOS_CSV, "a", newline="") as f:
-        writer = csv.writer(f)
-        if arquivo_novo:
-            writer.writerow(
-                ["timestamp_utc", "modelo", "input_tokens", "output_tokens", "custo_usd"]
-            )
-        writer.writerow(
-            [
-                datetime.now(timezone.utc).isoformat(),
-                modelo,
-                input_tokens,
-                output_tokens,
-                f"{custo_usd:.6f}",
-            ]
-        )
-    return custo_usd
+@app.exception_handler(Exception)
+async def manipulador_erro_generico(request: Request, exc: Exception):
+    # Loga o erro completo só no servidor (nunca a imagem, a explicação ou a
+    # chave de API — não aparecem nesses objetos). Ao cliente, só uma
+    # mensagem genérica, sem stack trace nem detalhes internos.
+    logger.exception("Erro não tratado em %s", request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Erro interno no servidor. Consulte os logs locais do uvicorn."},
+    )
 
 
 @app.get("/")
 async def raiz():
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(BASE_DIR / "static" / "index.html")
 
 
 @app.post("/explicar")
 async def explicar(imagem: UploadFile = File(...)):
-    if imagem.content_type not in TIPOS_PERMITIDOS:
+    conteudo = await imagem.read()
+
+    try:
+        validacao.validar(conteudo, imagem.content_type)
+    except validacao.ImagemInvalida as erro:
+        raise HTTPException(status_code=400, detail=str(erro))
+
+    # Trava de segurança: nenhuma chamada real (paga) à Anthropic acontece
+    # enquanto ENABLE_PAID_API_CALLS não for "true" no .env. Este bloco roda
+    # antes de qualquer referência ao SDK — não há caminho de código que
+    # alcance `anthropic.Anthropic()` com a trava desativada.
+    if not ENABLE_PAID_API_CALLS:
         raise HTTPException(
-            status_code=400,
-            detail=f"Tipo de arquivo não suportado: {imagem.content_type}. "
-            f"Envie uma imagem JPEG, PNG, WEBP ou GIF.",
+            status_code=403,
+            detail=(
+                "Chamadas pagas à API da Anthropic estão desabilitadas "
+                "(ENABLE_PAID_API_CALLS=false no .env). Esta é uma trava de "
+                "segurança deliberada — defina ENABLE_PAID_API_CALLS=true "
+                "manualmente no .env e reinicie o servidor para autorizar "
+                "chamadas reais."
+            ),
         )
 
-    conteudo = await imagem.read()
-    if len(conteudo) > TAMANHO_MAXIMO_BYTES:
-        raise HTTPException(status_code=400, detail="Imagem maior que 10 MB.")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise HTTPException(
+            status_code=500,
+            detail="ANTHROPIC_API_KEY não configurada. Edite o arquivo .env e reinicie o servidor.",
+        )
+
+    try:
+        limitador.verificar_e_incrementar()
+    except limitador.LimiteDeChamadasAtingido as erro:
+        raise HTTPException(status_code=429, detail=str(erro))
 
     imagem_base64 = base64.b64encode(conteudo).decode("utf-8")
 
-    client = anthropic.Anthropic()
-
+    inicio = time.monotonic()
     try:
+        client = anthropic.Anthropic()
         resposta = client.messages.create(
             model=MODEL,
-            max_tokens=1024,
+            max_tokens=MAX_TOKENS_RESPOSTA,
             system=SYSTEM_PROMPT,
             messages=[
                 {
@@ -124,21 +125,25 @@ async def explicar(imagem: UploadFile = File(...)):
     except anthropic.AuthenticationError:
         raise HTTPException(
             status_code=500,
-            detail="Chave de API inválida ou não configurada (ANTHROPIC_API_KEY).",
+            detail="Chave de API inválida. Verifique a ANTHROPIC_API_KEY no .env.",
         )
     except anthropic.RateLimitError:
         raise HTTPException(
-            status_code=429, detail="Limite de requisições da API atingido. Tente novamente em breve."
+            status_code=429,
+            detail="Limite de requisições da API da Anthropic atingido. Tente novamente em breve.",
         )
     except anthropic.APIConnectionError:
         raise HTTPException(status_code=502, detail="Falha de conexão com a API da Anthropic.")
+    except anthropic.APIStatusError:
+        logger.exception("Erro da API da Anthropic")
+        raise HTTPException(status_code=502, detail="A API da Anthropic retornou um erro.")
 
-    explicacao = "".join(
-        bloco.text for bloco in resposta.content if bloco.type == "text"
-    )
+    tempo_resposta_s = time.monotonic() - inicio
 
-    custo_usd = registrar_custo(
-        MODEL, resposta.usage.input_tokens, resposta.usage.output_tokens
+    explicacao = "".join(bloco.text for bloco in resposta.content if bloco.type == "text")
+
+    custo_usd = custos.registrar(
+        MODEL, resposta.usage.input_tokens, resposta.usage.output_tokens, tempo_resposta_s
     )
 
     return JSONResponse(
@@ -147,9 +152,11 @@ async def explicar(imagem: UploadFile = File(...)):
             "modelo": MODEL,
             "input_tokens": resposta.usage.input_tokens,
             "output_tokens": resposta.usage.output_tokens,
+            "tempo_resposta_s": round(tempo_resposta_s, 3),
             "custo_usd_estimado": round(custo_usd, 6),
+            "chamadas_restantes": limitador.chamadas_restantes(),
         }
     )
 
 
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
