@@ -1,7 +1,8 @@
 """Ponto de entrada da aplicação FastAPI. As rotas ficam finas — validação,
-limite de chamadas e registro de custo/tempo vivem em módulos separados
-(validacao.py, limitador.py, custos.py), e o prompt pedagógico fica em
-prompts/pedagogico.txt, fora do código de integração com a API.
+limite de chamadas, autorização de uso único e registro de custo/tempo vivem
+em módulos separados (validacao.py, limitador.py, autorizacao.py, custos.py),
+e o prompt pedagógico fica em prompts/pedagogico.txt, fora do código de
+integração com a API.
 """
 
 import base64
@@ -21,6 +22,7 @@ from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import autorizacao
 import custos
 import limitador
 import validacao
@@ -93,11 +95,25 @@ async def explicar(imagem: UploadFile = File(...)):
     except limitador.LimiteDeChamadasAtingido as erro:
         raise HTTPException(status_code=429, detail=str(erro))
 
+    # Autorização de uso único, separada do limitador geral acima. Consumida
+    # atomicamente (lock de arquivo) AQUI, antes de qualquer tentativa de
+    # chamada ao SDK — garante que, mesmo que a chamada falhe depois, a
+    # autorização já foi gasta e não volta sozinha, e que duas requisições
+    # concorrentes não consigam gastar a mesma autorização duas vezes.
+    try:
+        autorizacao.consumir_uma_autorizacao()
+    except autorizacao.AutorizacaoNaoConcedida as erro:
+        raise HTTPException(status_code=403, detail=str(erro))
+
     imagem_base64 = base64.b64encode(conteudo).decode("utf-8")
 
     inicio = time.monotonic()
     try:
-        client = anthropic.Anthropic()
+        # max_retries=0: o SDK, por padrão, tenta novamente automaticamente
+        # em erros retryable (429, 5xx, falha de conexão). Isso desligado é
+        # essencial aqui — uma autorização de UMA chamada não pode resultar
+        # em várias requisições HTTP reais por causa de um retry interno.
+        client = anthropic.Anthropic(max_retries=0)
         resposta = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS_RESPOSTA,
@@ -154,7 +170,8 @@ async def explicar(imagem: UploadFile = File(...)):
             "output_tokens": resposta.usage.output_tokens,
             "tempo_resposta_s": round(tempo_resposta_s, 3),
             "custo_usd_estimado": round(custo_usd, 6),
-            "chamadas_restantes": limitador.chamadas_restantes(),
+            "chamadas_restantes_limitador_geral": limitador.chamadas_restantes(),
+            "autorizacoes_de_chamada_real_restantes": autorizacao.consultar_autorizacoes_restantes(),
         }
     )
 

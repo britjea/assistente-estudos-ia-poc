@@ -80,7 +80,8 @@
           `Modelo: ${json.modelo} · tokens entrada: ${json.input_tokens} · ` +
           `tokens saída: ${json.output_tokens} · tempo: ${json.tempo_resposta_s}s · ` +
           `custo estimado: US$ ${json.custo_usd_estimado} · ` +
-          `chamadas restantes neste limite local: ${json.chamadas_restantes}`;
+          `limite geral restante: ${json.chamadas_restantes_limitador_geral} · ` +
+          `autorizações de chamada real restantes: ${json.autorizacoes_de_chamada_real_restantes}`;
       } catch (erro) {
         respostaEl.classList.add("erro");
         respostaEl.textContent = "Erro de conexão com o servidor.";

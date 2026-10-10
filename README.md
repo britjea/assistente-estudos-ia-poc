@@ -31,13 +31,33 @@ Por padrão o uvicorn liga em `127.0.0.1:8000` (não exposto para a rede). Abra 
 
 **Por padrão, nenhuma chamada real (paga) à API da Anthropic é feita.** O backend bloqueia a requisição com `403` *antes* de instanciar o SDK, enquanto `ENABLE_PAID_API_CALLS=false` no `.env` (o padrão). Isso existe para que rodar o servidor, testar a validação de arquivos, ou rodar a suíte automatizada nunca gere custo por acidente.
 
-**Para autorizar uma chamada real, manualmente:**
-1. Edite o `.env` e mude `ENABLE_PAID_API_CALLS=false` para `ENABLE_PAID_API_CALLS=true`.
-2. Reinicie o servidor (`uvicorn app:app --reload` já recarrega sozinho ao detectar mudança em arquivos `.py`, mas mudanças no `.env` exigem reiniciar o processo manualmente).
-3. Envie uma imagem — essa chamada específica vai gerar custo real (também limitada pelo `LIMITE_CHAMADAS`, padrão 5, independente da trava acima).
-4. Depois do teste, recomendo voltar `ENABLE_PAID_API_CALLS` para `false`.
-
 Um limitador local independente (`LIMITE_CHAMADAS` no `.env`, padrão 5) também bloqueia novas chamadas depois desse número de chamadas, mesmo com a trava acima ligada. Para zerar a contagem, apague o arquivo `contador_chamadas.json` (gerado automaticamente na primeira chamada).
+
+### Autorização de uso único para UMA chamada real
+
+Além da trava `ENABLE_PAID_API_CALLS` e do limitador geral acima, existe um **terceiro mecanismo, independente dos outros dois**: uma autorização explícita e de uso único, para permitir no máximo uma chamada real por vez. As três proteções são cumulativas — uma chamada só acontece se **todas** permitirem.
+
+- Persistida em `autorizacao_chamada_real.json` (git-ignorado), **nunca** contém a chave de API.
+- Saldo **zero por padrão** (arquivo ausente = 0 autorizações).
+- Consumida **atomicamente** (lock de arquivo via `fcntl.flock`) imediatamente antes de qualquer tentativa de chamada ao SDK — duas requisições concorrentes não conseguem gastar a mesma autorização.
+- A autorização é gasta **antes** da chamada acontecer. Se a chamada falhar (erro de rede, erro da API, o processo cair no meio do caminho) ou o servidor for reiniciado, **a autorização não volta sozinha** — é preciso reautorizar manualmente editando o arquivo de novo.
+- O cliente do SDK é criado com `max_retries=0`, para que uma falha não dispare retries automáticos internos do SDK (que, por padrão, tentaria novamente em erros como 429/5xx — gerando requisições HTTP reais adicionais por trás de uma única autorização).
+
+**Para autorizar exatamente UMA chamada real:**
+
+1. Confirme (ou crie) o arquivo `autorizacao_chamada_real.json` na raiz do projeto com:
+   ```json
+   {"chamadas_restantes": 1}
+   ```
+2. Mude `ENABLE_PAID_API_CALLS=false` para `true` no `.env`.
+3. Reinicie o servidor (mudanças em `.env` não são pegas pelo `--reload`).
+4. Envie **uma** imagem — essa é a única chamada autorizada. Uma segunda tentativa, mesmo imediatamente em seguida, será bloqueada com `403`.
+
+**Para verificar o consumo e o custo depois:**
+- `cat autorizacao_chamada_real.json` → `chamadas_restantes` deve estar em `0`, e `ultima_consumida_em_utc` mostra quando foi consumida.
+- `cat custos.csv` → a última linha mostra o modelo, tokens de entrada/saída, tempo de resposta e custo real estimado em USD daquela chamada específica.
+
+**Para autorizar uma nova chamada no futuro**, repita o passo 1 (edite `autorizacao_chamada_real.json` de novo com `chamadas_restantes: 1`) — nunca é reposto automaticamente.
 
 ## Estrutura do projeto
 
@@ -46,7 +66,8 @@ poc-estudos-ia/
 ├── app.py                   # Rotas FastAPI (fino — delega para os módulos abaixo)
 ├── config.py                 # Configuração central: modelo, preços, limites
 ├── validacao.py               # Valida tipo, tamanho e conteúdo real da imagem
-├── limitador.py                # Limite local de chamadas pagas (persistido em JSON)
+├── limitador.py                # Limite geral local de chamadas (persistido em JSON)
+├── autorizacao.py               # Autorização de uso único para 1 chamada real (lock de arquivo)
 ├── custos.py                   # Calcula e registra custo/tokens/tempo em CSV
 ├── prompts/
 │   └── pedagogico.txt          # Prompt do sistema, separado do código
@@ -69,17 +90,26 @@ poc-estudos-ia/
 
 ```bash
 pip install -r requirements-dev.txt
-pytest test_app.py -v
+pytest -v
 ```
 
-Cobertura:
+Cobertura (`test_app.py`, nível do endpoint HTTP):
 - Rejeita tipo de arquivo não permitido, arquivo vazio, conteúdo forjado (Content-Type mentiroso) e imagem maior que 5 MB — e confirma, em cada caso, que o mock do SDK **nunca foi chamado** (`assert_not_called()`).
 - Confirma que `ENABLE_PAID_API_CALLS=false` bloqueia com `403` mesmo com uma imagem válida, antes de tocar o SDK.
 - Confirma que a configuração real do projeto (lida do `.env`) é `ENABLE_PAID_API_CALLS=False` por padrão.
-- Testa o limitador de chamadas isoladamente (sem HTTP, sem rede) e via o endpoint (confirma `429` antes do SDK).
+- Testa o limitador geral isoladamente (sem HTTP, sem rede) e via o endpoint (confirma `429` antes do SDK).
+- Confirma que, com zero autorizações de chamada real (o padrão), o endpoint bloqueia com `403` mesmo com tudo mais liberado.
+- Confirma que, com exatamente 1 autorização concedida, a primeira chamada passa (mockada) e a segunda — imediatamente em seguida — é bloqueada; o mock do SDK só é "chamado" uma única vez no total.
+- Confirma que o cliente do SDK é instanciado com `max_retries=0`.
 - Um teste de fluxo completo com o SDK inteiramente substituído por `unittest.mock.MagicMock` (resposta simulada), provando que a integração (parsing, custo, contagem) funciona sem nenhum byte trafegar pela rede.
 
-Isolamento: cada teste usa arquivos temporários (`tmp_path` do pytest) para o contador de chamadas e o CSV de custos — a suíte nunca lê nem escreve `contador_chamadas.json` ou `custos.csv` reais do projeto.
+Cobertura (`test_autorizacao.py`, nível do módulo de autorização):
+- Padrão é zero autorizações; consumir uma concedida funciona; a segunda tentativa após consumir é bloqueada.
+- **Simula reinício da aplicação** (recarrega o módulo Python do zero via `importlib.reload`) e confirma que o saldo consumido continua em 0 — não existe nenhum contador em memória que sobrevive ou reseta entre reinícios, só o arquivo em disco.
+- Confirma que uma falha simulada após consumir a autorização não a repõe.
+- **Testa concorrência de verdade**: duas threads tentando consumir a mesma autorização simultaneamente (via `threading.Barrier`) — confirma que exatamente uma tem sucesso e a outra é bloqueada, graças ao lock de arquivo (`fcntl.flock`).
+
+Isolamento: cada teste usa arquivos temporários (`tmp_path` do pytest) para o contador de chamadas, o CSV de custos e o arquivo de autorização — a suíte nunca lê nem escreve `contador_chamadas.json`, `custos.csv` ou `autorizacao_chamada_real.json` reais do projeto.
 
 ### Testes manuais locais (sem custo)
 
@@ -91,7 +121,7 @@ Isolamento: cada teste usa arquivos temporários (`tmp_path` do pytest) para o c
 
 ### Teste end-to-end com chamada real (gera custo — exige autorização manual explícita)
 
-Só depois de mudar `ENABLE_PAID_API_CALLS=true` no `.env` deliberadamente (ver seção acima) e reiniciar o servidor:
+Só depois de seguir os 3 passos da seção "Autorização de uso único" acima (`autorizacao_chamada_real.json` com `chamadas_restantes: 1`, `ENABLE_PAID_API_CALLS=true`, servidor reiniciado):
 
 ```bash
 curl -X POST http://127.0.0.1:8000/explicar -F "imagem=@test_images/exemplo_matematica.png;type=image/png"

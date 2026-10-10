@@ -36,3 +36,9 @@ ENABLE_PAID_API_CALLS = os.environ.get("ENABLE_PAID_API_CALLS", "false").strip()
 CUSTOS_CSV = BASE_DIR / "custos.csv"
 CONTADOR_CHAMADAS_JSON = BASE_DIR / "contador_chamadas.json"
 PROMPT_PEDAGOGICO_PATH = BASE_DIR / "prompts" / "pedagogico.txt"
+
+# Autorização de uso único para chamadas reais — mecanismo independente do
+# LIMITE_CHAMADAS acima e da trava ENABLE_PAID_API_CALLS. Nunca contém a
+# chave de API; é editado manualmente pelo operador (ver autorizacao.py).
+# Zero autorizações concedidas por padrão.
+AUTORIZACAO_CHAMADA_REAL_JSON = BASE_DIR / "autorizacao_chamada_real.json"
