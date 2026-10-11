@@ -2,10 +2,11 @@
 `anthropic`. Não usa nenhuma fixture de test_app.py.
 """
 
-from correcao import corrigir_exercicio, corrigir_quiz
+from correcao import corrigir_exercicio, corrigir_quiz, corrigir_simulado
 from schemas import (
     Exercicio,
     QuestaoQuiz,
+    QuestaoSimulado,
     RespostaCoordenadas,
     RespostaNumerica,
     RespostaNumericaComId,
@@ -132,3 +133,53 @@ def test_quiz_indice_fora_do_range_nao_levanta_excecao():
 
     veredicto_negativo = corrigir_quiz(_questao_quiz(), -1)
     assert veredicto_negativo.correto is False
+
+
+# --- Simulado (correção em lote) --------------------------------------------
+
+
+def _questoes_simulado():
+    return [
+        QuestaoSimulado(id="s1", pergunta="...", opcoes=["a", "b"], indice_correto=0),
+        QuestaoSimulado(id="s2", pergunta="...", opcoes=["a", "b", "c"], indice_correto=2),
+        QuestaoSimulado(id="s3", pergunta="...", opcoes=["a", "b"], indice_correto=1),
+    ]
+
+
+def test_simulado_todas_corretas():
+    veredicto = corrigir_simulado(_questoes_simulado(), {"s1": 0, "s2": 2, "s3": 1})
+    assert veredicto.nota == 3
+    assert veredicto.total == 3
+    assert veredicto.percentual == 100.0
+    assert all(v["correto"] for v in veredicto.por_questao.values())
+
+
+def test_simulado_todas_erradas():
+    veredicto = corrigir_simulado(_questoes_simulado(), {"s1": 1, "s2": 0, "s3": 0})
+    assert veredicto.nota == 0
+    assert veredicto.percentual == 0.0
+
+
+def test_simulado_parcialmente_correto():
+    veredicto = corrigir_simulado(_questoes_simulado(), {"s1": 0, "s2": 0, "s3": 1})
+    assert veredicto.nota == 2
+    assert veredicto.total == 3
+    assert veredicto.percentual == round(2 / 3 * 100, 1)
+    assert veredicto.por_questao["s1"]["correto"] is True
+    assert veredicto.por_questao["s2"]["correto"] is False
+    assert veredicto.por_questao["s3"]["correto"] is True
+
+
+def test_simulado_revela_indice_correto_de_todas_as_questoes():
+    veredicto = corrigir_simulado(_questoes_simulado(), {})
+    assert veredicto.por_questao["s1"]["indice_correto"] == 0
+    assert veredicto.por_questao["s2"]["indice_correto"] == 2
+    assert veredicto.por_questao["s3"]["indice_correto"] == 1
+
+
+def test_simulado_questao_ausente_das_respostas_conta_como_errada():
+    """Aluno pulou uma questão — não deve levantar exceção."""
+    veredicto = corrigir_simulado(_questoes_simulado(), {"s1": 0, "s3": 1})  # s2 ausente
+    assert veredicto.nota == 2
+    assert veredicto.total == 3
+    assert veredicto.por_questao["s2"]["correto"] is False

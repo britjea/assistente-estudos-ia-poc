@@ -209,7 +209,82 @@
       "explicacao": "d = 5(5−3)/2 = 5×2/2 = 5 diagonais."
     }
   ],
-  "simulado": [],
-  "dicas": [],
-  "videos": []
+  "simulado": [
+    {
+      "id": "s-1",
+      "pergunta": "Duas retas se cruzam. Um ângulo mede 78°. O OPV mede:",
+      "opcoes": ["102°", "78°", "12°", "90°"],
+      "indice_correto": 1,
+      "explicacao": "OPV são iguais — o OPV de 78° é 78°."
+    },
+    {
+      "id": "s-2",
+      "pergunta": "Ângulos alternos internos (paralelas cortadas por transversal) são:",
+      "opcoes": ["Suplementares", "Complementares", "Congruentes (iguais)", "Sempre agudos"],
+      "indice_correto": 2,
+      "explicacao": "Alternos internos são sempre iguais quando as retas são paralelas."
+    },
+    {
+      "id": "s-3",
+      "pergunta": "Quantas diagonais tem um hexágono?",
+      "opcoes": ["6", "9", "12", "15"],
+      "indice_correto": 1,
+      "explicacao": "d = 6(6−3)/2 = 6×3/2 = 9 diagonais."
+    },
+    {
+      "id": "s-4",
+      "pergunta": "Soma dos ângulos internos de um octógono:",
+      "opcoes": ["900°", "1080°", "1260°", "720°"],
+      "indice_correto": 1,
+      "explicacao": "(n−2)×180° = (8−2)×180° = 6×180° = 1080°."
+    }
+  ],
+  "dicas": [
+    {
+      "id": "d-1",
+      "titulo": "OPV — Regra simples",
+      "itens": [
+        "Ângulos OPV (opostos pelo vértice) são sempre iguais",
+        "Ângulos adjacentes (lado a lado) somam sempre 180°",
+        "Os 4 ângulos formados por duas retas somam 360°"
+      ]
+    },
+    {
+      "id": "d-2",
+      "titulo": "Erros comuns a evitar",
+      "texto": "O erro mais frequente é confundir alternos com colaterais: alternos são iguais, colaterais somam 180°. Outro erro comum é esquecer o \"/2\" na fórmula de diagonais."
+    },
+    {
+      "id": "d-3",
+      "titulo": "Checklist para a véspera da prova",
+      "checklist": true,
+      "itens": [
+        "Sei o que são ângulos OPV e que são iguais",
+        "Sei identificar alternos internos, alternos externos, correspondentes e colaterais",
+        "Memorizei a fórmula d = n(n−3)/2",
+        "Sei calcular a soma dos ângulos internos: (n−2)×180°",
+        "Sei a diferença entre polígono côncavo e convexo"
+      ]
+    }
+  ],
+  "videos": [
+    {
+      "id": "v-1",
+      "titulo": "Ângulos Opostos pelo Vértice",
+      "descricao": "OPV — conceito, propriedades e exemplos com equações",
+      "youtube_id": "GmPX4zDMoKo"
+    },
+    {
+      "id": "v-2",
+      "titulo": "Retas Paralelas Cortadas por Transversal",
+      "descricao": "Correspondentes, alternos internos/externos e colaterais",
+      "youtube_id": "uDMYGVxgz0k"
+    },
+    {
+      "id": "v-3",
+      "titulo": "Diagonais de um Polígono",
+      "descricao": "Fórmula d = n(n-3)/2 — por que funciona e como usar",
+      "youtube_id": "qTHMqh7YNOQ"
+    }
+  ]
 }

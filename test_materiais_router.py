@@ -25,13 +25,18 @@ def test_get_material_retorna_200_e_estrutura_esperada():
     assert len(corpo["capitulos"]) == 2
     assert len(corpo["exercicios"]) == 4
     assert len(corpo["quiz"]) == 5
+    assert len(corpo["simulado"]) == 4
+    assert len(corpo["dicas"]) == 3
+    assert len(corpo["videos"]) == 3
 
 
-def test_get_material_nunca_inclui_gabarito_de_exercicios_ou_quiz():
+def test_get_material_nunca_inclui_gabarito_de_exercicios_quiz_ou_simulado():
     resp = client.get("/api/materiais/geometria-7-ano")
     corpo_como_texto = json.dumps(resp.json())
 
-    # Nenhuma explicação de exercício ou quiz deve vazar antes da correção.
+    # Nenhuma explicação de exercício, quiz ou simulado deve vazar antes da
+    # correção (dicas/vídeos não têm campo "explicacao", então essa busca
+    # continua válida para o payload inteiro).
     assert "explicacao" not in corpo_como_texto
 
     # Nenhum exercício carrega o campo "resposta" (valor esperado/tolerância).
@@ -42,6 +47,19 @@ def test_get_material_nunca_inclui_gabarito_de_exercicios_ou_quiz():
     # Nenhuma questão de quiz carrega o índice correto.
     for q in resp.json()["quiz"]:
         assert "indice_correto" not in q
+
+    # Nenhuma questão de simulado carrega o índice correto — só é revelado
+    # depois de POST .../simulado/corrigir.
+    for s in resp.json()["simulado"]:
+        assert "indice_correto" not in s
+
+
+def test_get_material_inclui_dicas_e_videos_sem_restricao():
+    """Dicas e vídeos não têm gabarito — são incluídos tal como estão."""
+    resp = client.get("/api/materiais/geometria-7-ano")
+    corpo = resp.json()
+    assert corpo["dicas"][0]["titulo"]
+    assert corpo["videos"][0]["youtube_id"]
 
 
 def test_get_material_inexistente_retorna_404():
@@ -137,4 +155,78 @@ def test_corrigir_material_inexistente_retorna_404():
         "/api/materiais/nao-existe/corrigir",
         json={"tipo": "quiz", "item_id": "q-1", "resposta": 0},
     )
+    assert resp.status_code == 404
+
+
+# --- POST .../simulado/corrigir (correção em lote) --------------------------
+# Gabarito real do material de exemplo: s-1→1, s-2→2, s-3→1, s-4→1.
+
+
+def test_corrigir_simulado_com_respostas_mistas():
+    resp = client.post(
+        "/api/materiais/geometria-7-ano/simulado/corrigir",
+        json={"respostas": {"s-1": 1, "s-2": 2, "s-3": 0, "s-4": 1}},
+    )
+    assert resp.status_code == 200
+    corpo = resp.json()
+    assert corpo["nota"] == 3
+    assert corpo["total"] == 4
+    assert corpo["percentual"] == 75.0
+    assert corpo["por_questao"]["s-3"]["correto"] is False
+    assert corpo["por_questao"]["s-3"]["indice_correto"] == 1
+
+
+def test_corrigir_simulado_revela_indice_correto_de_todas_as_questoes():
+    """Diferente de /corrigir (um item por vez), aqui revelar TODOS os
+    índices corretos de uma vez é o comportamento esperado — é o que
+    "corrigir o simulado inteiro" significa."""
+    resp = client.post(
+        "/api/materiais/geometria-7-ano/simulado/corrigir",
+        json={"respostas": {}},
+    )
+    assert resp.status_code == 200
+    por_questao = resp.json()["por_questao"]
+    assert len(por_questao) == 4
+    assert all("indice_correto" in v for v in por_questao.values())
+
+
+def test_corrigir_simulado_questao_ausente_nao_quebra():
+    resp = client.post(
+        "/api/materiais/geometria-7-ano/simulado/corrigir",
+        json={"respostas": {"s-1": 1}},  # s-2, s-3, s-4 ausentes
+    )
+    assert resp.status_code == 200
+    assert resp.json()["nota"] == 1
+
+
+def test_corrigir_simulado_material_inexistente_retorna_404():
+    resp = client.post(
+        "/api/materiais/nao-existe/simulado/corrigir",
+        json={"respostas": {}},
+    )
+    assert resp.status_code == 404
+
+
+# --- GET .../gabarito (view derivada, sem exigir submissão) -----------------
+
+
+def test_gabarito_nao_exige_nenhuma_submissao_previa():
+    resp = client.get("/api/materiais/geometria-7-ano/gabarito")
+    assert resp.status_code == 200
+    corpo = resp.json()
+    assert len(corpo["exercicios"]) == 4
+    assert len(corpo["quiz"]) == 5
+    assert len(corpo["simulado"]) == 4
+
+
+def test_gabarito_traz_resposta_e_explicacao():
+    resp = client.get("/api/materiais/geometria-7-ano/gabarito")
+    corpo = resp.json()
+    ex1 = next(i for i in corpo["exercicios"] if i["identificador"] == "1")
+    assert ex1["resposta_formatada"] == "65.0"
+    assert ex1["explicacao"]
+
+
+def test_gabarito_material_inexistente_retorna_404():
+    resp = client.get("/api/materiais/nao-existe/gabarito")
     assert resp.status_code == 404

@@ -99,6 +99,43 @@
     .q-explicacao.visivel { display: block; }
 
     .erro-geral { color: #c01828; padding: 20px; }
+
+    /* Simulado */
+    .sim-opcao {
+      display: block; width: 100%; text-align: left; background: #fff;
+      border: 2px solid #c0d0f0; border-radius: 8px; padding: 8px 12px;
+      font-size: 0.85rem; margin-bottom: 6px; cursor: pointer;
+    }
+    .sim-opcao.selecionada { border-color: #1040c8; background: #e8f0ff; }
+    .sim-opcao.certa { background: #e8f8ee; border-color: #1a8a40; color: #1a8a40; font-weight: 700; }
+    .sim-opcao.errada { background: #fff0f0; border-color: #c01828; }
+    .sim-botoes { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; }
+    .sim-resultado {
+      background: linear-gradient(135deg, #1040c8, #0a8a7a); color: #fff;
+      border-radius: 12px; padding: 20px; text-align: center; margin-bottom: 16px; display: none;
+    }
+    .sim-resultado.visivel { display: block; }
+    .sim-resultado .nota { font-size: 2.2rem; font-weight: 800; }
+
+    /* Vídeos */
+    .vid-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+    .vid-card { background: #edf3ff; border: 1.5px solid #c0d0f0; border-radius: 12px; overflow: hidden; }
+    .vid-card a { display: block; text-decoration: none; color: inherit; }
+    .vid-card img { width: 100%; display: block; }
+    .vid-card .vid-info { padding: 10px 12px; }
+    .vid-card h4 { color: #1040c8; font-size: 0.85rem; margin-bottom: 3px; }
+    .vid-card p { font-size: 0.78rem; color: #4a5888; }
+
+    /* Dicas */
+    .dica-card { border-left: 4px solid #1040c8; }
+    .checklist { list-style: none; padding: 0; font-size: 0.85rem; }
+    .checklist li { display: flex; gap: 8px; align-items: flex-start; padding: 5px 0; border-bottom: 1px solid #c0d0f0; }
+    .checklist li:last-child { border: none; }
+
+    /* Gabarito */
+    .gab-tabela { width: 100%; border-collapse: collapse; margin: 10px 0 20px; font-size: 0.82rem; }
+    .gab-tabela th { background: #1040c8; color: #fff; padding: 7px 10px; text-align: left; }
+    .gab-tabela td { padding: 7px 10px; border-bottom: 1px solid #c0d0f0; vertical-align: top; }
   </style>
 </head>
 <body>
@@ -109,26 +146,39 @@
     <button class="aba-btn ativa" data-painel="resumo">Resumo</button>
     <button class="aba-btn" data-painel="exercicios">Exercícios</button>
     <button class="aba-btn" data-painel="quiz">Quiz</button>
-    <button class="aba-btn em-breve" disabled title="Em breve">Simulado</button>
-    <button class="aba-btn em-breve" disabled title="Em breve">Vídeos</button>
-    <button class="aba-btn em-breve" disabled title="Em breve">Dicas</button>
-    <button class="aba-btn em-breve" disabled title="Em breve">Gabarito</button>
+    <button class="aba-btn" data-painel="simulado">Simulado</button>
+    <button class="aba-btn" data-painel="videos">Vídeos</button>
+    <button class="aba-btn" data-painel="dicas">Dicas</button>
+    <button class="aba-btn" data-painel="gabarito">Gabarito</button>
   </div>
 
   <div id="painel-resumo" class="painel ativo"></div>
   <div id="painel-exercicios" class="painel"></div>
   <div id="painel-quiz" class="painel"></div>
+  <div id="painel-simulado" class="painel"></div>
+  <div id="painel-videos" class="painel"></div>
+  <div id="painel-dicas" class="painel"></div>
+  <div id="painel-gabarito" class="painel"></div>
 
   <script>
     const materialId = window.location.pathname.split("/").filter(Boolean).pop();
     let dadosMaterial = null;
 
-    document.querySelectorAll(".abas .aba-btn:not(.em-breve)").forEach((btn) => {
+    let gabaritoCarregado = false;
+
+    document.querySelectorAll(".abas .aba-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         document.querySelectorAll(".abas .aba-btn").forEach((b) => b.classList.remove("ativa"));
         btn.classList.add("ativa");
         document.querySelectorAll(".painel").forEach((p) => p.classList.remove("ativo"));
         document.getElementById("painel-" + btn.dataset.painel).classList.add("ativo");
+
+        // O Gabarito revela tudo — só busca quando o aluno pede, não no
+        // carregamento inicial da página.
+        if (btn.dataset.painel === "gabarito" && !gabaritoCarregado) {
+          gabaritoCarregado = true;
+          renderGabarito();
+        }
       });
     });
 
@@ -391,6 +441,222 @@
       });
     }
 
+    // --- Simulado: correção em lote (responde tudo, corrige de uma vez) ---
+
+    let respostasSimulado = {};
+
+    function renderSimulado() {
+      respostasSimulado = {};
+      const painel = document.getElementById("painel-simulado");
+      painel.innerHTML = "";
+
+      const resultado = document.createElement("div");
+      resultado.className = "sim-resultado";
+      resultado.id = "sim-resultado";
+      painel.appendChild(resultado);
+
+      dadosMaterial.simulado.forEach((s) => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.dataset.itemId = s.id;
+
+        const pergunta = document.createElement("p");
+        pergunta.appendChild(textoComNegrito(s.pergunta));
+        card.appendChild(pergunta);
+
+        s.opcoes.forEach((opcao, indice) => {
+          const botao = document.createElement("button");
+          botao.className = "sim-opcao";
+          botao.textContent = opcao;
+          botao.dataset.indice = indice;
+          botao.addEventListener("click", () => {
+            card.querySelectorAll(".sim-opcao").forEach((b) => b.classList.remove("selecionada"));
+            botao.classList.add("selecionada");
+            respostasSimulado[s.id] = indice;
+          });
+          card.appendChild(botao);
+        });
+
+        painel.appendChild(card);
+      });
+
+      const botoes = document.createElement("div");
+      botoes.className = "sim-botoes";
+
+      const corrigirBtn = document.createElement("button");
+      corrigirBtn.className = "acao";
+      corrigirBtn.textContent = "Corrigir Simulado";
+      corrigirBtn.addEventListener("click", async () => {
+        const resp = await fetch(`/api/materiais/${materialId}/simulado/corrigir`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ respostas: respostasSimulado }),
+        });
+        const json = await resp.json();
+
+        painel.querySelectorAll(".card[data-item-id]").forEach((card) => {
+          const itemId = card.dataset.itemId;
+          const infoQuestao = json.por_questao[itemId];
+          if (!infoQuestao) return;
+          card.querySelectorAll(".sim-opcao").forEach((botao) => {
+            const indice = parseInt(botao.dataset.indice, 10);
+            if (indice === infoQuestao.indice_correto) botao.classList.add("certa");
+            else if (botao.classList.contains("selecionada")) botao.classList.add("errada");
+          });
+        });
+
+        resultado.innerHTML =
+          `<div class="nota">${json.nota}/${json.total}</div><div>${json.percentual}% de acerto</div>`;
+        resultado.classList.add("visivel");
+        window.scrollTo({ top: resultado.offsetTop - 80, behavior: "smooth" });
+      });
+      botoes.appendChild(corrigirBtn);
+
+      const recomecarBtn = document.createElement("button");
+      recomecarBtn.className = "acao";
+      recomecarBtn.style.background = "#4a5888";
+      recomecarBtn.textContent = "Recomeçar";
+      recomecarBtn.addEventListener("click", () => renderSimulado());
+      botoes.appendChild(recomecarBtn);
+
+      painel.insertBefore(botoes, painel.firstChild.nextSibling);
+    }
+
+    // --- Vídeos: link de sugestão + miniatura, derivados do youtube_id ---
+
+    function renderVideos() {
+      const painel = document.getElementById("painel-videos");
+      painel.innerHTML = "";
+      const grid = document.createElement("div");
+      grid.className = "vid-grid";
+
+      dadosMaterial.videos.forEach((v) => {
+        const card = document.createElement("div");
+        card.className = "vid-card";
+
+        const link = document.createElement("a");
+        link.href = `https://www.youtube.com/watch?v=${v.youtube_id}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+
+        const img = document.createElement("img");
+        img.src = `https://img.youtube.com/vi/${v.youtube_id}/mqdefault.jpg`;
+        img.alt = v.titulo;
+        link.appendChild(img);
+
+        const info = document.createElement("div");
+        info.className = "vid-info";
+        const h4 = document.createElement("h4");
+        h4.textContent = v.titulo;
+        const p = document.createElement("p");
+        p.textContent = v.descricao;
+        info.appendChild(h4);
+        info.appendChild(p);
+        link.appendChild(info);
+
+        card.appendChild(link);
+        grid.appendChild(card);
+      });
+
+      painel.appendChild(grid);
+    }
+
+    // --- Dicas: cards simples, com variante checklist ---
+
+    function renderDicas() {
+      const painel = document.getElementById("painel-dicas");
+      painel.innerHTML = "";
+
+      dadosMaterial.dicas.forEach((d) => {
+        const card = document.createElement("div");
+        card.className = "card dica-card";
+
+        const h4 = document.createElement("h4");
+        h4.textContent = d.titulo;
+        card.appendChild(h4);
+
+        if (d.checklist) {
+          const ul = document.createElement("ul");
+          ul.className = "checklist";
+          d.itens.forEach((item) => {
+            const li = document.createElement("li");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            const span = document.createElement("span");
+            span.textContent = item;
+            li.appendChild(checkbox);
+            li.appendChild(span);
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+        } else if (d.itens) {
+          const ul = document.createElement("ul");
+          ul.className = "bloco-lista";
+          d.itens.forEach((item) => {
+            const li = document.createElement("li");
+            li.appendChild(textoComNegrito(item));
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+        } else if (d.texto) {
+          const p = document.createElement("p");
+          p.appendChild(textoComNegrito(d.texto));
+          card.appendChild(p);
+        }
+
+        painel.appendChild(card);
+      });
+    }
+
+    // --- Gabarito: busca sob demanda, só quando a aba é clicada ---
+
+    async function renderGabarito() {
+      const painel = document.getElementById("painel-gabarito");
+      painel.textContent = "Carregando…";
+
+      const resp = await fetch(`/api/materiais/${materialId}/gabarito`);
+      if (!resp.ok) {
+        painel.innerHTML = '<p class="erro-geral">Erro ao carregar o gabarito.</p>';
+        return;
+      }
+      const gabarito = await resp.json();
+      painel.innerHTML = "";
+
+      const secoes = [
+        ["Exercícios", gabarito.exercicios],
+        ["Quiz", gabarito.quiz],
+        ["Simulado", gabarito.simulado],
+      ];
+
+      secoes.forEach(([titulo, itens]) => {
+        if (itens.length === 0) return;
+        const h3 = document.createElement("h3");
+        h3.className = "sec-titulo";
+        h3.textContent = titulo;
+        painel.appendChild(h3);
+
+        const tabela = document.createElement("table");
+        tabela.className = "gab-tabela";
+        tabela.innerHTML = "<thead><tr><th>#</th><th>Resposta</th><th>Explicação</th></tr></thead>";
+        const tbody = document.createElement("tbody");
+        itens.forEach((item) => {
+          const tr = document.createElement("tr");
+          const tdId = document.createElement("td");
+          tdId.textContent = item.identificador;
+          const tdResp = document.createElement("td");
+          tdResp.textContent = item.resposta_formatada;
+          const tdExp = document.createElement("td");
+          tdExp.textContent = item.explicacao || "";
+          tr.appendChild(tdId);
+          tr.appendChild(tdResp);
+          tr.appendChild(tdExp);
+          tbody.appendChild(tr);
+        });
+        tabela.appendChild(tbody);
+        painel.appendChild(tabela);
+      });
+    }
+
     async function iniciar() {
       try {
         const resp = await fetch(`/api/materiais/${materialId}`);
@@ -407,6 +673,10 @@
         renderResumo();
         renderExercicios();
         renderQuiz();
+        renderSimulado();
+        renderVideos();
+        renderDicas();
+        // Gabarito é buscado sob demanda — ver o listener de clique das abas.
       } catch (erro) {
         document.body.innerHTML = '<p class="erro-geral">Erro ao carregar o material.</p>';
       }

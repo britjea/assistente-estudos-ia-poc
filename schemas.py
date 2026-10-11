@@ -1,6 +1,5 @@
-"""Schema Pydantic versionado para materiais educacionais (resumo, exercícios,
-quiz, e os modelos de simulado/dicas/vídeos — definidos para não quebrar o
-schema depois, mas sem renderizador nesta etapa).
+"""Schema Pydantic versionado para materiais educacionais: resumo, exercícios,
+quiz, simulado (correção em lote), dicas e vídeos.
 
 Lacuna conhecida e deliberada: diagramas SVG (presentes no material de
 referência que originou este schema) não têm representação aqui. Modelar
@@ -8,12 +7,14 @@ geometria genérica (primitivas, rótulos, anotações) é um projeto à parte;
 quando isso for necessário, a forma mais simples é um bloco que referencia
 um arquivo estático (SVG/PNG) por caminho, não uma DSL de geometria.
 
-Os modelos "públicos" (ExercicioPublico, QuestaoQuizPublica) existem para
-que a API nunca devolva respostas corretas antes de o aluno responder — ver
-routers/materiais.py. Eles são construídos campo a campo (nunca via
-`model_dump(exclude=...)`), para que um campo sensível novo, adicionado no
-futuro ao modelo completo, não vaze silenciosamente por um `exclude`
-desatualizado.
+Os modelos "públicos" (ExercicioPublico, QuestaoQuizPublica,
+QuestaoSimuladoPublica) existem para que a API nunca devolva respostas
+corretas antes de o aluno responder — ver routers/materiais.py. Eles são
+construídos campo a campo (nunca via `model_dump(exclude=...)`), para que um
+campo sensível novo, adicionado no futuro ao modelo completo, não vaze
+silenciosamente por um `exclude` desatualizado. O Gabarito é a exceção
+deliberada: lê o modelo completo e revela tudo, sob demanda (ver
+material_para_gabarito), nunca a partir do payload da GET pública.
 """
 
 from typing import Annotated, Literal, Union
@@ -229,7 +230,8 @@ def quiz_para_publico(questao: QuestaoQuiz) -> QuestaoQuizPublica:
 
 
 # --------------------------------------------------------------------------
-# Stubs — schema definido, sem renderizador nesta etapa
+# Simulado — correção em lote (ver correcao.corrigir_simulado), não pergunta
+# a pergunta como o quiz.
 # --------------------------------------------------------------------------
 
 
@@ -238,6 +240,27 @@ class QuestaoSimulado(BaseModel):
     pergunta: str
     opcoes: list[str]
     indice_correto: int
+    # Opcional e aditivo: não aparece na correção em lote (que já é direta —
+    # certo/errado + índice certo), mas alimenta o Gabarito.
+    explicacao: str | None = None
+
+
+class QuestaoSimuladoPublica(BaseModel):
+    """Versão sem gabarito — nunca inclui indice_correto nem explicacao,
+    igual a QuestaoQuizPublica."""
+
+    id: str
+    pergunta: str
+    opcoes: list[str]
+
+
+def simulado_para_publico(questao: QuestaoSimulado) -> QuestaoSimuladoPublica:
+    return QuestaoSimuladoPublica(id=questao.id, pergunta=questao.pergunta, opcoes=questao.opcoes)
+
+
+# --------------------------------------------------------------------------
+# Dicas — sem gabarito, incluída na resposta pública tal como está.
+# --------------------------------------------------------------------------
 
 
 class Dica(BaseModel):
@@ -246,6 +269,23 @@ class Dica(BaseModel):
     texto: str | None = None
     itens: list[str] | None = None
     checklist: bool = False
+
+    @model_validator(mode="after")
+    def texto_itens_e_checklist_consistentes(self) -> "Dica":
+        if self.checklist:
+            if self.itens is None:
+                raise ValueError("Dica com checklist=True precisa de 'itens'")
+            if self.texto is not None:
+                raise ValueError("Dica com checklist=True não deve ter 'texto'")
+        elif (self.texto is None) == (self.itens is None):
+            raise ValueError("Dica precisa de exatamente um entre 'texto' e 'itens'")
+        return self
+
+
+# --------------------------------------------------------------------------
+# Vídeos — sem gabarito. O "link de sugestão" (URL completa + miniatura) é
+# derivado do youtube_id inteiramente no frontend; não precisa de campo novo.
+# --------------------------------------------------------------------------
 
 
 class Video(BaseModel):
@@ -273,15 +313,18 @@ class MaterialEducacional(BaseModel):
 
 
 class MaterialEducacionalPublico(BaseModel):
-    """O que GET /api/materiais/{id} devolve: capítulos/resumo inalterados
-    (não têm gabarito), exercícios e quiz nas versões públicas (sem
-    resposta/indice_correto/explicacao)."""
+    """O que GET /api/materiais/{id} devolve: capítulos/resumo e dicas/vídeos
+    inalterados (não têm gabarito), exercícios/quiz/simulado nas versões
+    públicas (sem resposta/indice_correto/explicacao)."""
 
     id: str
     metadados: Metadados
     capitulos: list[Capitulo]
     exercicios: list[ExercicioPublico]
     quiz: list[QuestaoQuizPublica]
+    simulado: list[QuestaoSimuladoPublica]
+    dicas: list[Dica]
+    videos: list[Video]
 
 
 def material_para_publico(material: MaterialEducacional) -> MaterialEducacionalPublico:
@@ -291,4 +334,67 @@ def material_para_publico(material: MaterialEducacional) -> MaterialEducacionalP
         capitulos=material.capitulos,
         exercicios=[exercicio_para_publico(e) for e in material.exercicios],
         quiz=[quiz_para_publico(q) for q in material.quiz],
+        simulado=[simulado_para_publico(s) for s in material.simulado],
+        dicas=material.dicas,
+        videos=material.videos,
+    )
+
+
+# --------------------------------------------------------------------------
+# Gabarito — view derivada do modelo COMPLETO (nunca do público). Não duplica
+# dado nenhum no JSON de conteúdo; é só uma forma de leitura.
+# --------------------------------------------------------------------------
+
+
+class GabaritoItem(BaseModel):
+    identificador: str  # numero do exercício (como string) ou id da questão
+    enunciado: str
+    resposta_formatada: str
+    explicacao: str | None = None
+
+
+class Gabarito(BaseModel):
+    exercicios: list[GabaritoItem]
+    quiz: list[GabaritoItem]
+    simulado: list[GabaritoItem]
+
+
+def _resposta_formatada(exercicio: Exercicio) -> str:
+    r = exercicio.resposta
+    if isinstance(r, RespostaNumerica) or isinstance(r, RespostaNumericaComId):
+        return str(r.valor_esperado)
+    if isinstance(r, RespostaCoordenadas):
+        return "; ".join(f"{c.rotulo} {c.valor_esperado}" for c in r.campos)
+    raise TypeError(f"tipo de resposta desconhecido: {type(r)!r}")
+
+
+def material_para_gabarito(material: MaterialEducacional) -> Gabarito:
+    return Gabarito(
+        exercicios=[
+            GabaritoItem(
+                identificador=str(e.numero),
+                enunciado=e.enunciado,
+                resposta_formatada=_resposta_formatada(e),
+                explicacao=e.explicacao,
+            )
+            for e in material.exercicios
+        ],
+        quiz=[
+            GabaritoItem(
+                identificador=q.id,
+                enunciado=q.pergunta,
+                resposta_formatada=q.opcoes[q.indice_correto],
+                explicacao=q.explicacao,
+            )
+            for q in material.quiz
+        ],
+        simulado=[
+            GabaritoItem(
+                identificador=s.id,
+                enunciado=s.pergunta,
+                resposta_formatada=s.opcoes[s.indice_correto],
+                explicacao=s.explicacao,
+            )
+            for s in material.simulado
+        ],
     )

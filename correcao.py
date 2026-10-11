@@ -1,5 +1,5 @@
-"""Lógica de correção de exercícios e quiz — funções puras, sem nenhum
-import de FastAPI/HTTP. Totalmente testável sem subir um servidor.
+"""Lógica de correção de exercícios, quiz e simulado — funções puras, sem
+nenhum import de FastAPI/HTTP. Totalmente testável sem subir um servidor.
 
 Separar isto da apresentação (routers/materiais.py) é o que permite que a
 rota pública nunca precise conhecer a resposta certa: ela só recebe a
@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from schemas import (
     Exercicio,
     QuestaoQuiz,
+    QuestaoSimulado,
     RespostaCoordenadas,
     RespostaNumerica,
     RespostaNumericaComId,
@@ -33,6 +34,14 @@ class VeredictoExercicio:
 class VeredictoQuiz:
     correto: bool
     explicacao: str
+
+
+@dataclass
+class VeredictoSimulado:
+    nota: int
+    total: int
+    percentual: float
+    por_questao: dict[str, dict]  # {item_id: {"correto": bool, "indice_correto": int}}
 
 
 def _dentro_da_tolerancia(enviado: float, esperado: float, tolerancia: float) -> bool:
@@ -90,3 +99,24 @@ def corrigir_quiz(questao: QuestaoQuiz, indice_enviado: int) -> VeredictoQuiz:
     não deve derrubar a correção."""
     correto = 0 <= indice_enviado < len(questao.opcoes) and indice_enviado == questao.indice_correto
     return VeredictoQuiz(correto=correto, explicacao=questao.explicacao)
+
+
+def corrigir_simulado(
+    questoes: list[QuestaoSimulado], respostas: dict[str, int]
+) -> VeredictoSimulado:
+    """Correção em lote: diferente do quiz (uma pergunta por vez), o
+    simulado revela TODAS as respostas certas de uma vez, junto com a nota
+    agregada. Uma questão ausente de `respostas` (aluno pulou) conta como
+    errada, nunca levanta exceção."""
+    por_questao: dict[str, dict] = {}
+    nota = 0
+    for questao in questoes:
+        indice_enviado = respostas.get(questao.id)
+        correto = indice_enviado is not None and indice_enviado == questao.indice_correto
+        if correto:
+            nota += 1
+        por_questao[questao.id] = {"correto": correto, "indice_correto": questao.indice_correto}
+
+    total = len(questoes)
+    percentual = round((nota / total) * 100, 1) if total > 0 else 0.0
+    return VeredictoSimulado(nota=nota, total=total, percentual=percentual, por_questao=por_questao)

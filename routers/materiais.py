@@ -16,11 +16,20 @@ from pydantic import BaseModel
 
 import correcao
 import materiais_loader
-from schemas import material_para_publico
+from schemas import MaterialEducacional, material_para_gabarito, material_para_publico
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 router = APIRouter()
+
+
+def _carregar_ou_404(material_id: str) -> MaterialEducacional:
+    try:
+        return materiais_loader.load_material(material_id)
+    except materiais_loader.MaterialNaoEncontrado:
+        raise HTTPException(status_code=404, detail="Material não encontrado.")
+    except materiais_loader.MaterialInvalido:
+        raise HTTPException(status_code=500, detail="Material inválido. Consulte os logs locais.")
 
 
 # --------------------------------------------------------------------------
@@ -58,24 +67,22 @@ async def pagina_material(material_id: str):
 
 @router.get("/api/materiais/{material_id}")
 async def obter_material(material_id: str):
-    try:
-        material = materiais_loader.load_material(material_id)
-    except materiais_loader.MaterialNaoEncontrado:
-        raise HTTPException(status_code=404, detail="Material não encontrado.")
-    except materiais_loader.MaterialInvalido as erro:
-        raise HTTPException(status_code=500, detail="Material inválido. Consulte os logs locais.")
-
+    material = _carregar_ou_404(material_id)
     return material_para_publico(material)
+
+
+@router.get("/api/materiais/{material_id}/gabarito")
+async def obter_gabarito(material_id: str):
+    """Lê o material COMPLETO (não o público) e revela exercícios, quiz e
+    simulado com resposta e explicação — uma consulta, não uma correção.
+    Não exige nenhuma submissão prévia."""
+    material = _carregar_ou_404(material_id)
+    return material_para_gabarito(material)
 
 
 @router.post("/api/materiais/{material_id}/corrigir")
 async def corrigir(material_id: str, corpo: CorrigirRequest = Body(discriminator="tipo")):
-    try:
-        material = materiais_loader.load_material(material_id)
-    except materiais_loader.MaterialNaoEncontrado:
-        raise HTTPException(status_code=404, detail="Material não encontrado.")
-    except materiais_loader.MaterialInvalido:
-        raise HTTPException(status_code=500, detail="Material inválido. Consulte os logs locais.")
+    material = _carregar_ou_404(material_id)
 
     if corpo.tipo == "exercicio":
         exercicio = next((e for e in material.exercicios if e.id == corpo.item_id), None)
@@ -93,3 +100,23 @@ async def corrigir(material_id: str, corpo: CorrigirRequest = Body(discriminator
         raise HTTPException(status_code=404, detail="Questão não encontrada.")
     veredicto = correcao.corrigir_quiz(questao, corpo.resposta)
     return {"correto": veredicto.correto, "explicacao": veredicto.explicacao}
+
+
+class CorrigirSimuladoRequest(BaseModel):
+    respostas: dict[str, int]  # item_id -> índice escolhido
+
+
+@router.post("/api/materiais/{material_id}/simulado/corrigir")
+async def corrigir_simulado(material_id: str, corpo: CorrigirSimuladoRequest):
+    """Correção em lote: diferente de /corrigir (um item por vez), revela o
+    índice correto de TODAS as questões do simulado de uma vez, junto com a
+    nota agregada — é exatamente o que "corrigir o simulado inteiro"
+    significa, não um vazamento."""
+    material = _carregar_ou_404(material_id)
+    veredicto = correcao.corrigir_simulado(material.simulado, corpo.respostas)
+    return {
+        "nota": veredicto.nota,
+        "total": veredicto.total,
+        "percentual": veredicto.percentual,
+        "por_questao": veredicto.por_questao,
+    }

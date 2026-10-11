@@ -10,7 +10,7 @@ from pathlib import Path
 import pydantic
 import pytest
 
-from schemas import MaterialEducacional
+from schemas import Dica, MaterialEducacional, QuestaoSimulado
 
 EXEMPLO_JSON = Path(__file__).parent / "materiais" / "geometria-7-ano.json"
 
@@ -22,6 +22,40 @@ def test_material_de_exemplo_carrega_corretamente():
     assert len(material.capitulos) == 2
     assert len(material.exercicios) == 4
     assert len(material.quiz) == 5
+    assert len(material.simulado) == 4
+    assert len(material.dicas) == 3
+    assert len(material.videos) == 3
+
+
+def test_questao_simulado_explicacao_e_opcional():
+    # Sem explicacao — continua válido (campo opcional, aditivo).
+    questao = QuestaoSimulado(id="s1", pergunta="...", opcoes=["a", "b"], indice_correto=0)
+    assert questao.explicacao is None
+
+    questao_com_explicacao = QuestaoSimulado(
+        id="s2", pergunta="...", opcoes=["a", "b"], indice_correto=0, explicacao="porque sim"
+    )
+    assert questao_com_explicacao.explicacao == "porque sim"
+
+
+def test_dica_checklist_exige_itens_e_proibe_texto():
+    with pytest.raises(pydantic.ValidationError):
+        Dica(id="d1", titulo="T", checklist=True)  # sem itens
+
+    with pytest.raises(pydantic.ValidationError):
+        Dica(id="d1", titulo="T", checklist=True, itens=["a"], texto="não deveria ter")
+
+
+def test_dica_nao_checklist_exige_exatamente_texto_ou_itens():
+    with pytest.raises(pydantic.ValidationError):
+        Dica(id="d1", titulo="T")  # nem texto nem itens
+
+    with pytest.raises(pydantic.ValidationError):
+        Dica(id="d1", titulo="T", texto="a", itens=["b"])  # os dois ao mesmo tempo
+
+    # Um dos dois, sozinho, é válido.
+    assert Dica(id="d1", titulo="T", texto="a").texto == "a"
+    assert Dica(id="d1", titulo="T", itens=["a"]).itens == ["a"]
 
 
 def test_bloco_resumo_com_tipo_desconhecido_e_rejeitado():
